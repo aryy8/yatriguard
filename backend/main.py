@@ -4,6 +4,9 @@ AI/ML-based safety system for tourists with rule-based fallbacks
 """
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel, Field
+import json
+import os
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Union
@@ -23,13 +26,13 @@ from models.detection_models import (
     RedZoneDetector
 )
 from services.alert_service import AlertService
+import uuid
 from services.data_processing import SensorDataProcessor
 from utils.geo_utils import GeoUtils
 from utils.battery_optimization import BatteryOptimizer
 from fallback_systems.red_zone_fallback import RedZoneSystemFallback
 from fallback_systems.rule_based_fallback import RuleBasedSystemFallback
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -39,12 +42,87 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# File upload model for documents
+class FileUpload(BaseModel):
+    name: str
+    size: int
+
+# Digital ID Pydantic model matching your form structure
+class DigitalID(BaseModel):
+    gender: str | None = None
+    travelMode: str | None = None
+    locationConsent: str | None = None
+    consent: bool | None = None
+    destinations: list[str] | None = None
+    aadhaarNumber: str | None = None
+    otp: str | None = None
+    accommodationName: str | None = None
+    accommodationAddress: str | None = None
+    bookingRef: str | None = None
+    itinerary: str | None = None
+    fullName: str | None = None
+    dob: str | None = None
+    nationality: str | None = None
+    mobile: str | None = None
+    email: str | None = None
+    arrival: str | None = None
+    departure: str | None = None
+    emergencyPrimaryName: str | None = None
+    emergencyPrimaryRelation: str | None = None
+    emergencyPrimaryPhone: str | None = None
+    emergencySecondaryName: str | None = None
+    emergencySecondaryRelation: str | None = None
+    emergencySecondaryPhone: str | None = None
+    bloodGroup: str | None = None
+    allergies: str | None = None
+
+    class Config:
+        extra = "allow"
+
+# Endpoint to accept and store Digital ID form data
+@app.post("/api/digital-id")
+async def submit_digital_id(data: DigitalID):
+    """Accept and store Digital ID form data from frontend"""
+    try:
+        # Store in a JSON file (can be replaced with DB logic)
+        save_path = "digital_id_submissions.json"
+        entry = data.dict()
+        entry["submitted_at"] = datetime.utcnow().isoformat()
+        
+        # Load existing data
+        if os.path.exists(save_path):
+            with open(save_path, "r") as f:
+                submissions = json.load(f)
+        else:
+            submissions = []
+        
+        submissions.append(entry)
+        
+        with open(save_path, "w") as f:
+            json.dump(submissions, f, indent=2)
+        
+        logger.info(f"Digital ID submitted for {data.fullName}")
+        return {"status": "success", "message": "Digital ID submitted successfully", "data": entry}
+    
+    except Exception as e:
+        logger.error(f"Error submitting Digital ID: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to submit Digital ID")
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000", 
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173"
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
