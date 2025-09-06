@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Shield, QrCode, MapPin, AlertTriangle, Clock, Users, TrendingUp } from "lucide-react";
+import { Shield, QrCode, MapPin, AlertTriangle, Clock, Users, TrendingUp, Navigation, Wifi } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import SafetyDashboard from "@/components/SafetyDashboard";
+import { useYatriGuardWebSocket, SafetyUtils } from "@/services/aiSafetyService";
 
 interface Alert {
   id: string;
@@ -55,6 +58,40 @@ export const Dashboard: React.FC = () => {
   const [safetyScore] = useState(92);
   const [saved, setSaved] = useState<SavedId | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<{lat: number; lng: number} | null>(null);
+
+  // Generate user ID from saved data or create temporary one
+  const userId = useMemo(() => {
+    return saved?.idNumber || `temp_${Date.now()}`;
+  }, [saved]);
+
+  // Get user's current location
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCurrentLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          // Default to Jaipur coordinates for demo
+          setCurrentLocation({
+            lat: 26.9124,
+            lng: 75.7873
+          });
+        }
+      );
+    } else {
+      // Default location if geolocation not supported
+      setCurrentLocation({
+        lat: 26.9124,
+        lng: 75.7873
+      });
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -140,76 +177,138 @@ export const Dashboard: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Safety Score & Active Trip */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Safety Score */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <TrendingUp className="w-5 h-5 text-success" />
-              <span>Safety Score</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="text-center">
-                <div className="text-4xl font-bold text-success mb-2">{safetyScore}/100</div>
-                <p className="text-sm text-muted-foreground">Excellent Safety Rating</p>
-              </div>
-              <Progress value={safetyScore} className="h-3" />
-              <div className="text-xs text-muted-foreground space-y-1">
-                <div className="flex justify-between">
-                  <span>• ID Verification</span>
-                  <span className="text-success">✓ Complete</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>• Emergency Contacts</span>
-                  <span className="text-success">✓ 3 Added</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>• Location Sharing</span>
-                  <span className="text-success">✓ Active</span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Enhanced AI Safety Dashboard */}
+      <Tabs defaultValue="ai-safety" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="ai-safety" className="flex items-center space-x-2">
+            <Shield className="w-4 h-4" />
+            <span>AI Safety</span>
+          </TabsTrigger>
+          <TabsTrigger value="trip-status" className="flex items-center space-x-2">
+            <Navigation className="w-4 h-4" />
+            <span>Trip Status</span>
+          </TabsTrigger>
+          <TabsTrigger value="legacy" className="flex items-center space-x-2">
+            <TrendingUp className="w-4 h-4" />
+            <span>Overview</span>
+          </TabsTrigger>
+        </TabsList>
 
-        {/* Active Trip */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <MapPin className="w-5 h-5 text-primary" />
-              <span>Current Trip</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div>
-                <h3 className="font-semibold text-lg">{activeTrip.destination}</h3>
-                <p className="text-muted-foreground">{activeTrip.duration}</p>
-              </div>
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span>Trip Progress</span>
-                  <span>{activeTrip.progress}%</span>
+        <TabsContent value="ai-safety" className="space-y-6">
+          <SafetyDashboard userId={userId} currentLocation={currentLocation} />
+        </TabsContent>
+
+        <TabsContent value="trip-status" className="space-y-6">
+          {/* Active Trip with Enhanced Features */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <MapPin className="w-5 h-5 text-primary" />
+                <span>Current Trip</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-semibold text-lg">{activeTrip.destination}</h3>
+                  <p className="text-muted-foreground">{activeTrip.duration}</p>
                 </div>
-                <Progress value={activeTrip.progress} className="h-2" />
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span>Trip Progress</span>
+                    <span>{activeTrip.progress}%</span>
+                  </div>
+                  <Progress value={activeTrip.progress} className="h-2" />
+                </div>
+                
+                {/* Location Info */}
+                {currentLocation && (
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Current Location</span>
+                    <div className="font-mono text-xs mt-1">
+                      {currentLocation.lat.toFixed(6)}, {currentLocation.lng.toFixed(6)}
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex space-x-2">
+                  <Button size="sm" variant="outline" className="flex-1">
+                    <MapPin className="w-4 h-4 mr-2" />
+                    View Map
+                  </Button>
+                  <Button size="sm" variant="outline" className="flex-1">
+                    <Users className="w-4 h-4 mr-2" />
+                    Share
+                  </Button>
+                </div>
               </div>
-              <div className="flex space-x-2">
-                <Button size="sm" variant="outline" className="flex-1">
-                  <MapPin className="w-4 h-4 mr-2" />
-                  View Map
-                </Button>
-                <Button size="sm" variant="outline" className="flex-1">
-                  <Users className="w-4 h-4 mr-2" />
-                  Share
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="legacy" className="space-y-6">
+          {/* Legacy Safety Score & Trip Overview */}
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Legacy Safety Score */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <TrendingUp className="w-5 h-5 text-success" />
+                  <span>Profile Safety Score</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <div className="text-4xl font-bold text-success mb-2">{safetyScore}/100</div>
+                    <p className="text-sm text-muted-foreground">Excellent Safety Rating</p>
+                  </div>
+                  <Progress value={safetyScore} className="h-3" />
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <div className="flex justify-between">
+                      <span>• ID Verification</span>
+                      <span className="text-success">✓ Complete</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>• Emergency Contacts</span>
+                      <span className="text-success">✓ 3 Added</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>• Location Sharing</span>
+                      <span className="text-success">✓ Active</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Trip Summary */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <MapPin className="w-5 h-5 text-primary" />
+                  <span>Trip Summary</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-semibold text-lg">{activeTrip.destination}</h3>
+                    <p className="text-muted-foreground">{activeTrip.duration}</p>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span>Trip Progress</span>
+                      <span>{activeTrip.progress}%</span>
+                    </div>
+                    <Progress value={activeTrip.progress} className="h-2" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Recent Alerts */}
       <Card>

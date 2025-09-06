@@ -294,32 +294,79 @@ export default function DigitalID() {
     const ok = await validateCurrentStep();
     if (!ok) return;
     const values = form.getValues();
-    const idNumber = `YG-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
-    const docHash = `0x${Math.random().toString(16).substring(2, 6)}...${Math.random().toString(16).substring(2, 6)}`;
+    
+    // Create the payload to match the expected JSON structure
     const payload = {
-      idNumber,
-      docHash,
-      fullName: values.fullName,
-      arrival: values.arrival ? (values.arrival as Date).toISOString() : undefined,
-      departure: values.departure ? (values.departure as Date).toISOString() : undefined,
-      destinations: values.destinations,
+      gender: values.gender,
       travelMode: values.travelMode,
+      locationConsent: values.locationConsent,
+      destinations: values.destinations,
+      aadhaarNumber: values.aadhaarNumber || "",
+      otp: values.otp || "",
       accommodationName: values.accommodationName,
       accommodationAddress: values.accommodationAddress,
-      bookingRef: values.bookingRef,
+      bookingRef: values.bookingRef || "",
+      itinerary: values.itinerary || "",
+      fullName: values.fullName,
+      dob: values.dob ? values.dob.toISOString() : "",
+      nationality: values.nationality,
+      mobile: values.mobile,
+      email: values.email,
+      idDoc: values.idDoc ? {
+        name: values.idDoc.name,
+        size: values.idDoc.size
+      } : null,
+      selfie: values.selfie ? {
+        name: values.selfie.name,
+        size: values.selfie.size
+      } : null,
+      arrival: values.arrival ? values.arrival.toISOString() : "",
+      departure: values.departure ? values.departure.toISOString() : "",
       emergencyPrimaryName: values.emergencyPrimaryName,
+      emergencyPrimaryRelation: values.emergencyPrimaryRelation,
       emergencyPrimaryPhone: values.emergencyPrimaryPhone,
-      locationConsent: values.locationConsent,
+      bloodGroup: values.bloodGroup || ""
     };
-    try {
-      localStorage.setItem("yg_digital_id", JSON.stringify(payload));
-    } catch {}
-    // Simulate blockchain write buffer before navigating
+
     setProcessing(true);
-    setTimeout(() => {
+    
+    try {
+      // Send to backend
+      const response = await fetch("http://localhost:8000/api/digital-id", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      const result = await response.json();
+      
+      if (result.status === "success") {
+        // Also save to localStorage for offline access
+        const idNumber = `YG-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
+        const docHash = `0x${Math.random().toString(16).substring(2, 6)}...${Math.random().toString(16).substring(2, 6)}`;
+        const localPayload = {
+          idNumber,
+          docHash,
+          ...payload
+        };
+        
+        try {
+          localStorage.setItem("yg_digital_id", JSON.stringify(localPayload));
+        } catch {}
+        
+        setProcessing(false);
+        navigate("/dashboard");
+      } else {
+        setProcessing(false);
+        alert("Failed to submit Digital ID. Please try again.");
+      }
+    } catch (error) {
       setProcessing(false);
-      navigate("/dashboard");
-    }, 2000);
+      alert("Error submitting Digital ID. Please check your connection and try again.");
+      console.error("Digital ID submission error:", error);
+    }
   };
 
   return (
